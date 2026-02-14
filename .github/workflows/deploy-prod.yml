@@ -1,0 +1,84 @@
+name: Deploy to Production
+
+on:
+  push:
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+    branches:
+      - main
+
+env:
+  APP_NAME: pingpong-prod
+  DOCKER_REPO: allandeba/ping-pong-phaser3
+  DOCKER_TAG: prod-${{ github.sha }}
+  DOCKERFILE: ./Dockerfile
+  DEPLOY_PORT: 9050
+  HEALTH_CHECK_URL: https://pingpong.allandeba.dev.br
+  PROJECT_PATH: ./
+  
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Build and Push
+        uses: ./.github/actions/docker-build
+        with:
+          tag: ${{ env.DOCKER_TAG }}
+          docker-repo: ${{ env.DOCKER_REPO }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          dockerfile: ${{ env.DOCKERFILE }}
+          args: ${{ env.DOCKER_ARGS }}
+
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_HOST_PRD }}
+          username: ${{ secrets. SERVER_USERNAME_PRD }}
+          password: ${{ secrets.SERVER_PASSWORD_PRD }}
+          script: |
+            docker pull ${{ env.DOCKER_REPO }}:${{ env.DOCKER_TAG }}
+            docker rm -f ${{ env.APP_NAME }} || true
+            docker run -d --restart=always --name ${{ env.APP_NAME }} -p ${{ env.DEPLOY_PORT }}:3000 ${{ env.DOCKER_REPO }}:${{ env.DOCKER_TAG }}
+
+      - name: Check status
+        uses: jtalk/url-health-check-action@v4
+        with:
+          url: ${{ env.HEALTH_CHECK_URL }}
+          follow-redirect: true
+          max-attempts: 3
+          retry-delay: 10s
+          retry-all: true
+
+      - name: Tag as Stable
+        if: success()
+        run: |
+          docker tag ${{ env.DOCKER_REPO }}:${{ env.DOCKER_TAG }} ${{ env.DOCKER_REPO }}:prod-stable
+          docker push ${{ env.DOCKER_REPO }}:prod-stable
+
+  rollback:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Rollback to Previous Version
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_HOST_PRD }}
+          username: ${{ secrets. SERVER_USERNAME_PRD }}
+          password: ${{ secrets.SERVER_PASSWORD_PRD }}
+          script: |
+            docker rm -f ${{ env.APP_NAME }} || true
+
+            # Capture the output of the docker run command
+            output=$(docker run -d --restart=always --name ${{ env.APP_NAME }} -p ${{ env.DEPLOY_PORT }}:3000 ${{ env.DOCKER_REPO }}:prod-stable 2>&1)
+            echo "$output"
+
+            # Check if the warning is in the output
+            if echo "$output" | grep -qE "WARNING|Error"; then
+              echo "Error encountered. Failing the job."
+              exit 1
+            fi
