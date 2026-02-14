@@ -1,12 +1,25 @@
 # Ping Pong Multiplayer
 
-> Planejamento, bugs, features e tarefas são acompanhados no Project do GitHub:  
-> **Board do projeto:** https://github.com/orgs/iAllandeba/projects/1
-
-Um jogo de Pong multiplayer em tempo real, desenvolvido com foco em aprendizado, boas práticas de arquitetura de jogos e colaboração aberta.  
+Um jogo de Ping Pong multiplayer em tempo real, desenvolvido com foco em aprendizado, boas práticas de arquitetura de jogos e colaboração aberta.  
 O projeto utiliza **Phaser3** para o front-end (cliente do jogo) e **Node.js + Socket.IO** no back-end para comunicação em tempo real entre os jogadores.
 
 Este repositório é open source e foi pensado para receber contribuições de desenvolvedores e entusiastas que queiram melhorar o jogo, adicionar novas funcionalidades, corrigir bugs ou criar modos de jogo.
+
+## 📌 Acompanhamento do Projeto
+
+O planejamento, controle de bugs, implementação de features e organização de tarefas são gerenciados no board oficial do GitHub:
+
+🔗 **Board do Projeto:**  
+https://github.com/orgs/iAllandeba/projects/1
+
+---
+
+## 🔔 Atualizações e Comunicação
+
+Para receber notificações sobre atualizações de fluxos, mudanças e novidades do projeto, entre no canal do Discord:
+
+💬 **Discord:**  
+https://discord.gg/hgWCdxfe
 
 ---
 
