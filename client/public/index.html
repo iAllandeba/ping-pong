@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Ping Pong Multiplayer</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+    <link rel="icon" href="assets/image/favicon.ico" type="image/x-icon">
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+<div id="loading-screen">
+    <div class="spinner"></div>
+    <p>Carregando configurações...</p>
+</div>
+
+<div id="game-container"></div>
+
+<script src="../src/game/scenes/main.js" type="module"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 Um jogo de Pong multiplayer em tempo real, desenvolvido com foco em aprendizado, boas práticas de arquitetura de jogos e colaboração aberta.  
 O projeto utiliza **Phaser3** para o front-end (cliente do jogo) e **Node.js + Socket.IO** no back-end para comunicação em tempo real entre os jogadores.
 
-Este repositório é open source e foi pensado para receber contribuições de desenvolvedores e entusiastas que queiram melhorar o jogo, adicionar novas funcionalidades, corrigir bugs ou criar novos modos de jogo.
+Este repositório é open source e foi pensado para receber contribuições de desenvolvedores e entusiastas que queiram melhorar o jogo, adicionar novas funcionalidades, corrigir bugs ou criar modos de jogo.
 
 ---
 
@@ -17,7 +17,7 @@ O **Ping Pong Multiplayer** é um jogo de Pong para dois jogadores que se conect
 Principais características:
 
 - Partidas 1x1 em tempo real via WebSocket (Socket.IO).
-- Sincronização de estado do jogo no servidor (server authoritative).
+- Sincronização de estado do jogo no servidor (servidor authoritative).
 - Suporte a reconexão do jogador (quando possível).
 - Deploy automatizado em ambiente de **homologação** e **produção**.
 - Estrutura pensada para facilitar testes, refatorações e novas features.
@@ -32,7 +32,7 @@ Você pode ajudar com:
 
 - Novas funcionalidades (ex.: power-ups, novos modos de jogo).
 - Correção de bugs.
-- Melhoria de performance.
+- Melhoria de desempenho.
 - Refatoração de código.
 - Documentação e testes automatizados.
 
@@ -40,28 +40,28 @@ Você pode ajudar com:
 
 1. **Faça um fork** do repositório.
 2. **Crie uma branch** para sua feature ou correção de bug:
-```bash
-git checkout -b feature/minha-feature # ou git checkout -b fix/meu-bugfix
-```
-3. **Implemente suas alterações**, mantendo o código limpo e coeso.
+    ```bash
+    git checkout -b feature/minha-feature # ou git checkout -b fix/meu-bugfix
+    ```
+3. **Implemente as suas alterações**, mantendo o código limpo e coeso.
 4. **Adicione ou atualize testes**, se aplicável.
 5. **Execute os testes localmente**
 6. **Faça o commit** com uma mensagem clara:
-```bash
-git commit -m "feat: adiciona modo hardcore"
-git commit -m "fix: corrige reconexão do player 2"
-git commit -m "style: melhoria de estilos do menu"
-git commit -m "perf: otimização da resposta entre servidor e cliente"
-```
+    ```bash
+    git commit -m "feat: adiciona modo hardcore"
+    git commit -m "fix: corrige reconexão do player 2"
+    git commit -m "style: melhoria de estilos do menu"
+    git commit -m "perf: otimização da resposta entre servidor e cliente"
+    ```
 7. **Envie sua branch para o seu fork**:
-```bash
-git push origin feature/minha-feature
-```
+    ```bash
+    git push origin feature/minha-feature
+    ```
 8. **Abra um Pull Request (PR) em homologação** apontando para este repositório.
 
 ### Boas práticas para Pull Requests
 
-- Descreva claramente **o que foi feito** e **por que**.
+- Descreva claramente **o que foi feito** e **por quê**.
 - Se possível, adicione **prints**, **gifs** ou descrição de **cenários de teste**.
 - Tente manter o PR focado em **uma única mudança** ou em mudanças fortemente relacionadas.
 - Evite incluir mudanças irrelevantes (ex.: formatação em arquivos que não fazem parte da sua alteração).
@@ -79,7 +79,7 @@ O projeto utiliza uma esteira de **CI/CD** configurada para publicação automá
 
 - **Pull Request para a branch `homol`**
   - Ao abrir ou atualizar um **PR com destino à branch `homol`**, a pipeline de publicação é acionada automaticamente.
-  - O build é gerado, a imagem/container é publicada e o ambiente de **homologação** é atualizado:
+  - O Build é gerado, a imagem/container é publicada e o ambiente de **homologação** é atualizado:
     - URL: `https://hml-pingpong.allandeba.dev.br`
   - Use esse ambiente para testes manuais, validação de novas features e QA.
 
@@ -173,7 +173,7 @@ Este é o ambiente “oficial” do jogo, utilizado por usuários finais.
 ## 📦 Estrutura (resumo)
 
 - `server.js` – ponto de entrada do servidor Node.js / Socket.IO.
-- `src/` - arquivos estáticos do cliente (HTML, JS bundlado, etc.).
+- `src/` - arquivos estáticos do cliente (HTML, JS bundler, etc.).
 - `multiplayerScene.js` – lógica da cena multiplayer no Phaser.
 - `singlePlayerScene.js` – lógica da cena single player no Phaser.
 - `menuScene.js` – tela inicial / menu do jogo.

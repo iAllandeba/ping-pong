@@ -1,0 +1,20 @@
+{
+  "name": "ping-pong",
+  "version": "1.0.0",
+  "description": "Jogo Ping Pong Multiplayer com Phaser 3 e Socket.IO",
+  "main": "./server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
