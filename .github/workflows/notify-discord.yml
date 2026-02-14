@@ -1,0 +1,43 @@
+name: Notify Discord
+
+on:
+  workflow_run:
+    workflows:
+      - "Deploy to Homologation"
+      - "Deploy to Production"
+    types:
+      - completed
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Notification to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT: ${{ github.event.workflow_run.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.workflow_run.head_commit.author.name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        run: |
+          COLOR=$([ "$STATUS" == "success" ] && echo 65280 || echo 16711680)
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          curl -X POST -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK" <<EOF
+          {
+            "embeds": [{
+              "title": "CI/CD Pipeline Notification",
+              "color": $COLOR,
+              "fields": [
+                {"name": "Status", "value": "$STATUS", "inline": true},
+                {"name": "Branch", "value": "$BRANCH", "inline": true},
+                {"name": "Commit Message", "value": "$COMMIT", "inline": false},
+                {"name": "Commit Author", "value": "$COMMIT_AUTHOR", "inline": true},
+                {"name": "Workflow", "value": "[View Logs]($RUN_URL)", "inline": false}
+              ],
+              "footer": {"text": "GitHub Actions CI/CD"},
+              "timestamp": "$TIMESTAMP"
+            }]
+          }
+          EOF
