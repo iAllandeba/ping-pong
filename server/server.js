@@ -213,15 +213,15 @@ class GameRoom {
     }
 
     getFullGameState() {
-        return {
-            ball: { ...this.gameState.ball },
-            paddle1: { ...this.gameState.paddle1 },
-            paddle2: { ...this.gameState.paddle2 },
-            scores: { ...this.gameState.scores },
+        return Object.freeze({
+            ball: Object.freeze({ ...this.gameState.ball }),
+            paddle1: Object.freeze({ y: this.gameState.paddle1 }),
+            paddle2: Object.freeze({ y: this.gameState.paddle2 }),
+            scores: Object.freeze({ ...this.gameState.scores }),
             gameStarted: this.gameState.gameStarted,
-            isPaused: this.gameState.isPaused, // ✅ Inclui isPaused
-            stats: { ...this.stats }
-        };
+            isPaused: this.gameState.isPaused,
+            stats: this.stats
+        });
     }
 
     // ✅ Pausa o jogo de forma autoritativa
