@@ -589,7 +589,7 @@ class MultiplayerScene extends BaseGameScene {
     }
 
     sendPaddleInput() {
-        console.debug(`✅ sendPaddleInput para o servidor. this.playerNumber=${this.playerNumber}`);
+        // console.debug(`✅ sendPaddleInput para o servidor. this.playerNumber=${this.playerNumber}`);
 
         if (!this.socket || !this.playerNumber) return;
 
@@ -606,7 +606,7 @@ class MultiplayerScene extends BaseGameScene {
         const now = Date.now();
         this.inputHistory.push({ time: now, vy });
 
-        console.debug(`✅ enviando evento paddleInput para o servidor. room: ${this.roomCode}, vy: ${vy}, clientTime: ${now}`);
+        // console.debug(`✅ enviando evento paddleInput para o servidor. room: ${this.roomCode}, vy: ${vy}, clientTime: ${now}`);
 
         this.socket.emit('paddleInput', {
             room: this.roomCode,
