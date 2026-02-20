@@ -476,15 +476,21 @@ class GameRoom {
             let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
             speed *= cfg.BALL_ACCELERATION;
 
-            // após bater no P1, bola sempre vai para a direita (vx > 0)
-            state.ball.vx = Math.cos(angle) * speed;
-            state.ball.vy = Math.sin(angle) * speed;
+            // Pequena influência da velocidade do paddle no ângulo
+            // Quanto mais o paddle estiver se movendo, mais "puxa" o ângulo
+            const paddleInfluence = (state.paddle1.vy / cfg.PADDLE_SPEED) * (15 * Math.PI / 180); // até +/- 15°
+            const finalAngle = angle + paddleInfluence;
+
+            // Após bater no P1, bola sempre vai para a direita (vx > 0)
+            state.ball.vx = Math.cos(finalAngle) * speed;
+            state.ball.vy = Math.sin(finalAngle) * speed;
 
             this.clampBallSpeed(state.ball);
+            this.clampVerticalRatio(state.ball, 0.75);
+
             this.lastHitPaddle = 1;
             this.stats.p1.hits++;
-
-            io.to(this.roomId).emit('paddleHit', { player: 1, angle });
+            io.to(this.roomId).emit('paddleHit', { player: 1, angle: finalAngle });
         }
         // Paddle 2
         else if (
@@ -500,25 +506,25 @@ class GameRoom {
             let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
             speed *= cfg.BALL_ACCELERATION;
 
-            // após bater no P2, bola sempre vai para a esquerda (vx < 0)
-            state.ball.vx = -Math.cos(angle) * speed;
-            state.ball.vy = Math.sin(angle) * speed;
+            const paddleInfluence = (state.paddle2.vy / cfg.PADDLE_SPEED) * (15 * Math.PI / 180);
+            const finalAngle = angle + paddleInfluence;
+
+            // Após bater no P2, bola sempre vai para a esquerda (vx < 0)
+            state.ball.vx = -Math.cos(finalAngle) * speed;
+            state.ball.vy = Math.sin(finalAngle) * speed;
 
             this.clampBallSpeed(state.ball);
+            this.clampVerticalRatio(state.ball, 0.75);
+
             this.lastHitPaddle = 2;
             this.stats.p2.hits++;
-
-            io.to(this.roomId).emit('paddleHit', { player: 2, angle });
-        } else {
-            // Reset quando a bola cruza o meio da tela
-            const midX = cfg.WIDTH / 2;
-            if (
-                (this.lastHitPaddle === 1 && state.ball.x > midX) ||
-                (this.lastHitPaddle === 2 && state.ball.x < midX)
-            ) {
-                console.debug(`[Room ${this.roomId}] lastHitPaddle resetado após cruzar o meio. Era: ${this.lastHitPaddle}`);
-                this.lastHitPaddle = null;
-            }
+            io.to(this.roomId).emit('paddleHit', { player: 2, angle: finalAngle });
+        } else if (
+            (state.ball.x - cfg.BALL_RADIUS > cfg.PADDLE1_X + cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 1) ||
+            (state.ball.x + cfg.BALL_RADIUS < cfg.PADDLE2_X - cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 2)
+        ) {
+            // Reset lastHitPaddle se a bola passou do paddle
+            this.lastHitPaddle = null;
         }
 
         // Garante que a bola nunca fique quase horizontal demais
@@ -682,6 +688,21 @@ class GameRoom {
         const maxRad = (MAX_BOUNCE_ANGLE_DEG * Math.PI) / 180;
 
         return clamped * maxRad; // -maxRad ... +maxRad
+    }
+
+    /**
+     * Garante que o componente vertical nunca seja quase 100% da velocidade.
+     * Útil contra ângulos muito verticais.
+     */
+    clampVerticalRatio(ball, maxVerticalRatio = 0.85) {
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        if (speed === 0) return;
+
+        const maxVy = speed * maxVerticalRatio;
+        if (Math.abs(ball.vy) > maxVy) {
+            const sign = ball.vy >= 0 ? 1 : -1;
+            ball.vy = sign * maxVy;
+        }
     }
 }
 
