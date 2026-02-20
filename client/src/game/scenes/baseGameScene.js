@@ -49,6 +49,8 @@
     }
 
     update() {
+        if (!this.gameStarted) return;
+
         this.updateBallTrail();
     }
 
@@ -157,7 +159,8 @@
     }
 
     updateBallTrail() {
-        if (!this.ball || !this.ball.body) return;
+        if (!this.ball) return;
+
         this.trailPoints.push({ x: this.ball.x, y: this.ball.y });
         if (this.trailPoints.length > 10) this.trailPoints.shift();
 

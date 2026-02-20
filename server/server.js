@@ -47,6 +47,7 @@ class GameRoom {
         this.disconnectedPlayers = new Map(); // playerNumber -> { reconnectToken, disconnectTime, playerData, timeoutId }
         this.savedBallState = null; // ✅ Salva o estado da bola ao pausar
         this.broadcastCount = 0;
+        this._lastBroadcastState = null;
 
         this.serverCountdownTimer = null; // ✅ Novo: Timer para o countdown do servidor
     }
@@ -212,15 +213,15 @@ class GameRoom {
     }
 
     getFullGameState() {
-        return {
-            ball: { ...this.gameState.ball },
-            paddle1: { ...this.gameState.paddle1 },
-            paddle2: { ...this.gameState.paddle2 },
-            scores: { ...this.gameState.scores },
+        return Object.freeze({
+            ball: Object.freeze({ ...this.gameState.ball }),
+            paddle1: Object.freeze({ y: this.gameState.paddle1 }),
+            paddle2: Object.freeze({ y: this.gameState.paddle2 }),
+            scores: Object.freeze({ ...this.gameState.scores }),
             gameStarted: this.gameState.gameStarted,
-            isPaused: this.gameState.isPaused, // ✅ Inclui isPaused
-            stats: { ...this.stats }
-        };
+            isPaused: this.gameState.isPaused,
+            stats: this.stats
+        });
     }
 
     // ✅ Pausa o jogo de forma autoritativa
@@ -281,24 +282,26 @@ class GameRoom {
 
     // ✅ NOVO: Inicia o countdown no servidor
     startServerCountdown(duration, onCompleteCallback) {
-        let timeLeft = duration / 1000; // Converte para segundos
-        io.to(this.roomId).emit('serverCountdown', { time: timeLeft, totalDuration: duration });
-        console.log(`[Room ${this.roomId}] Servidor iniciando countdown: ${timeLeft}s`);
+        const startTime = Date.now();
+        const endTime = startTime + duration;
+        let lastEmittedSecond = Math.ceil(duration / 1000);
 
+        io.to(this.roomId).emit('serverCountdown', { time: lastEmittedSecond, totalDuration: duration });
         this.serverCountdownTimer = setInterval(() => {
-            timeLeft--;
-            io.to(this.roomId).emit('serverCountdown', { time: timeLeft, totalDuration: duration });
-            console.log(`[Room ${this.roomId}] Countdown: ${timeLeft}s`);
+            const remaining = endTime - Date.now();
+            const secondsLeft = Math.ceil(remaining / 1000);
 
-            if (timeLeft <= 0) {
+            if (secondsLeft !== lastEmittedSecond) {
+                lastEmittedSecond = secondsLeft;
+                io.to(this.roomId).emit('serverCountdown', { time: Math.max(0, secondsLeft), totalDuration: duration });
+            }
+
+            if (remaining <= 0) {
                 clearInterval(this.serverCountdownTimer);
                 this.serverCountdownTimer = null;
-                console.log(`[Room ${this.roomId}] Countdown finalizado.`);
-                if (onCompleteCallback) {
-                    onCompleteCallback();
-                }
+                if (onCompleteCallback) onCompleteCallback();
             }
-        }, 1000);
+        }, 100);
     }
 
     startGame() {
@@ -394,21 +397,21 @@ class GameRoom {
 
     updateGamePhysics(dt) {
         const state = this.gameState;
-        if (!state.gameStarted || state.isPaused) {
-            return;
-        }
+        if (!state.gameStarted || state.isPaused) return;
 
-        // velocidade escalar
-        const speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
-        let steps = 1;
+        const speed = Math.hypot(state.ball.vx, state.ball.vy);
 
-        if (speed > 800) {
-            steps = 3; // subdivide em 3 passos em alta velocidade
-        }
+        // Número de subpassos dinâmico baseado na velocidade
+        // Garante que a bola nunca percorra mais que BALL_RADIUS por subpasso
+        const maxDistPerStep = this.cfg.BALL_RADIUS * 0.8;
+        const distThisFrame = speed * dt;
+        const steps = Math.max(1, Math.ceil(distThisFrame / maxDistPerStep));
 
         const subDt = dt / steps;
         for (let i = 0; i < steps; i++) {
             this._physicsStep(subDt);
+            // Se um ponto foi marcado dentro do subpasso, para a simulação
+            if (!state.gameStarted) break;
         }
     }
 
@@ -421,137 +424,148 @@ class GameRoom {
             return;
         }
 
-        // ✅ VERIFICAÇÃO ADICIONAL: Garante que a bola está dentro dos limites no início do jogo
-        // Isso evita que um ponto seja marcado no primeiro tick se a bola estiver "nascendo" fora
-        if (state.ball.x < cfg.BALL_RADIUS || state.ball.x > cfg.WIDTH - cfg.BALL_RADIUS) {
-            // Se a bola está muito perto da borda no início, não pontua ainda.
-            // Isso pode acontecer se a bola for lançada exatamente na borda ou ligeiramente fora.
-            // Apenas move a bola para dentro se estiver muito perto.
-            if (state.ball.x < cfg.BALL_RADIUS) state.ball.x = cfg.BALL_RADIUS;
-            if (state.ball.x > cfg.WIDTH - cfg.BALL_RADIUS) state.ball.x = cfg.WIDTH - cfg.BALL_RADIUS;
-            // console.log(`[Room ${this.roomId}] Ajustando bola para dentro do campo: x=${state.ball.x}`);
-        }
-
-
-        // Atualiza posição da bola
-        state.ball.x += state.ball.vx * dt;
-        state.ball.y += state.ball.vy * dt;
-
-        // Limites verticais
-        const top = cfg.BALL_RADIUS;
-        const bottom = cfg.HEIGHT - cfg.BALL_RADIUS;
-        if (state.ball.y <= top) {
-            state.ball.y = top;
-            state.ball.vy *= -1;
-        } else if (state.ball.y >= bottom) {
-            state.ball.y = bottom;
-            state.ball.vy *= -1;
-        }
-
-        // Atualiza paddles com base em vy atuais
-        state.paddle1.y += state.paddle1.vy * dt;
-        state.paddle2.y += state.paddle2.vy * dt;
-
-        // Clampa paddles dentro dos limites da tela
+        const ball = state.ball;
         const halfPaddle = cfg.PADDLE_HEIGHT / 2;
+
+        // ─────────────────────────────────────────────
+        // 1. GUARDAR POSIÇÃO ANTERIOR (necessário para swept)
+        // ─────────────────────────────────────────────
+        const prevX = ball.x;
+        const prevY = ball.y;
+
+        // ─────────────────────────────────────────────
+        // 2. MOVER A BOLA
+        // ─────────────────────────────────────────────
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+
+        // ─────────────────────────────────────────────
+        // 3. COLISÃO VERTICAL (paredes topo/base)
+        // ─────────────────────────────────────────────
+        const top    = cfg.BALL_RADIUS;
+        const bottom = cfg.HEIGHT - cfg.BALL_RADIUS;
+
+        if (ball.y <= top) {
+            ball.y  = top;
+            ball.vy = Math.abs(ball.vy); // sempre para baixo
+        } else if (ball.y >= bottom) {
+            ball.y  = bottom;
+            ball.vy = -Math.abs(ball.vy); // sempre para cima
+        }
+
+        // ─────────────────────────────────────────────
+        // 4. MOVER PADDLES
+        // ─────────────────────────────────────────────
         const minY = halfPaddle;
         const maxY = cfg.HEIGHT - halfPaddle;
 
-        state.paddle1.y = Math.max(minY, Math.min(maxY, state.paddle1.y));
-        state.paddle2.y = Math.max(minY, Math.min(maxY, state.paddle2.y));
+        state.paddle1.y = Phaser_clamp(state.paddle1.y + state.paddle1.vy * dt, minY, maxY);
+        state.paddle2.y = Phaser_clamp(state.paddle2.y + state.paddle2.vy * dt, minY, maxY);
 
-        // Colisão com paddles
-        // Paddle 1
+        // ─────────────────────────────────────────────
+        // 5. SWEPT COLLISION COM PADDLES
+        //
+        // Para cada paddle, definimos um "plano de colisão" vertical (linha X).
+        // Verificamos se a trajetória da bola [prevX → ball.x] cruzou esse plano
+        // E se, no ponto de cruzamento, a bola estava dentro da faixa Y do paddle.
+        // ─────────────────────────────────────────────
+
+        // --- PADDLE 1 (esquerdo) ---
+        // O plano de colisão é a face direita do paddle
+        const p1Face = cfg.PADDLE1_X + cfg.PADDLE_WIDTH / 2;
+
         if (
-            state.ball.vx < 0 && // Bola indo para a esquerda
-            state.ball.x - cfg.BALL_RADIUS <= cfg.PADDLE1_X + cfg.PADDLE_WIDTH / 2 && // Posição X da bola
-            state.ball.x - cfg.BALL_RADIUS >= cfg.PADDLE1_X - cfg.PADDLE_WIDTH / 2 && // Garante que a bola não passe direto
-            state.ball.y + cfg.BALL_RADIUS >= state.paddle1.y - halfPaddle && // Colisão Y
-            state.ball.y - cfg.BALL_RADIUS <= state.paddle1.y + halfPaddle &&
-            this.lastHitPaddle !== 1 // Evita múltiplas colisões no mesmo tick
+            ball.vx < 0 &&          // bola indo para esquerda
+            this.lastHitPaddle !== 1 // sem colisão dupla
         ) {
-            const angle = this.calculateBounceAngle(state.ball.y, state.paddle1.y, halfPaddle);
+            // A bola cruzou o plano se:
+            //   - prevX estava à direita do plano (bola ainda não tinha chegado)
+            //   - ball.x está à esquerda do plano (bola passou ou está no paddle)
+            const prevLeftEdge = prevX - cfg.BALL_RADIUS;
+            const currLeftEdge = ball.x - cfg.BALL_RADIUS;
 
-            // velocidade atual com aceleração
-            let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
-            speed *= cfg.BALL_ACCELERATION;
+            if (prevLeftEdge >= p1Face && currLeftEdge <= p1Face) {
+                // Calcula o tempo exato (t ∈ [0,1]) em que a bola tocou o plano
+                const tHit = (prevLeftEdge - p1Face) / (prevLeftEdge - currLeftEdge);
 
-            // Pequena influência da velocidade do paddle no ângulo
-            // Quanto mais o paddle estiver se movendo, mais "puxa" o ângulo
-            const paddleInfluence = (state.paddle1.vy / cfg.PADDLE_SPEED) * (15 * Math.PI / 180); // até +/- 15°
-            const finalAngle = angle + paddleInfluence;
+                // Posição Y interpolada no momento do impacto
+                const hitY = prevY + (ball.y - prevY) * tHit;
 
-            // Após bater no P1, bola sempre vai para a direita (vx > 0)
-            state.ball.vx = Math.cos(finalAngle) * speed;
-            state.ball.vy = Math.sin(finalAngle) * speed;
+                // Verifica se a bola estava dentro da área do paddle no impacto
+                const p1Top    = state.paddle1.y - halfPaddle - cfg.BALL_RADIUS;
+                const p1Bottom = state.paddle1.y + halfPaddle + cfg.BALL_RADIUS;
 
-            this.clampBallSpeed(state.ball);
-            this.clampVerticalRatio(state.ball, 0.75);
+                if (hitY >= p1Top && hitY <= p1Bottom) {
+                    // ✅ COLISÃO CONFIRMADA — resolver
+                    this._resolvePaddleCollision(ball, state.paddle1, 1, hitY, state.paddle1.y, halfPaddle, p1Face, cfg);
 
-            this.lastHitPaddle = 1;
-            this.stats.p1.hits++;
-            io.to(this.roomId).emit('paddleHit', { player: 1, angle: finalAngle });
+                    // Reposiciona a bola exatamente na face do paddle (sem interpenetração)
+                    ball.x = p1Face + cfg.BALL_RADIUS;
+
+                    // Simula o tempo restante após o impacto com a nova velocidade
+                    const remainingT = (1 - tHit) * dt;
+                    ball.x += ball.vx * remainingT;
+                    ball.y += ball.vy * remainingT;
+                    // (garante que o resto do subpasso não é desperdiçado)
+                }
+            }
         }
-        // Paddle 2
-        else if (
-            state.ball.vx > 0 && // Bola indo para a direita
-            state.ball.x + cfg.BALL_RADIUS >= cfg.PADDLE2_X - cfg.PADDLE_WIDTH / 2 && // Posição X da bola
-            state.ball.x + cfg.BALL_RADIUS <= cfg.PADDLE2_X + cfg.PADDLE_WIDTH / 2 && // Garante que a bola não passe direto
-            state.ball.y + cfg.BALL_RADIUS >= state.paddle2.y - halfPaddle && // Colisão Y
-            state.ball.y - cfg.BALL_RADIUS <= state.paddle2.y + halfPaddle &&
-            this.lastHitPaddle !== 2 // Evita múltiplas colisões no mesmo tick
+
+        // --- PADDLE 2 (direito) ---
+        // O plano de colisão é a face esquerda do paddle
+        const p2Face = cfg.PADDLE2_X - cfg.PADDLE_WIDTH / 2;
+
+        if (
+            ball.vx > 0 &&          // bola indo para direita
+            this.lastHitPaddle !== 2
         ) {
-            const angle = this.calculateBounceAngle(state.ball.y, state.paddle2.y, halfPaddle);
+            const prevRightEdge = prevX + cfg.BALL_RADIUS;
+            const currRightEdge = ball.x + cfg.BALL_RADIUS;
 
-            let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
-            speed *= cfg.BALL_ACCELERATION;
+            if (prevRightEdge <= p2Face && currRightEdge >= p2Face) {
+                const tHit = (p2Face - prevRightEdge) / (currRightEdge - prevRightEdge);
 
-            const paddleInfluence = (state.paddle2.vy / cfg.PADDLE_SPEED) * (15 * Math.PI / 180);
-            const finalAngle = angle + paddleInfluence;
+                const hitY = prevY + (ball.y - prevY) * tHit;
 
-            // Após bater no P2, bola sempre vai para a esquerda (vx < 0)
-            state.ball.vx = -Math.cos(finalAngle) * speed;
-            state.ball.vy = Math.sin(finalAngle) * speed;
+                const p2Top    = state.paddle2.y - halfPaddle - cfg.BALL_RADIUS;
+                const p2Bottom = state.paddle2.y + halfPaddle + cfg.BALL_RADIUS;
 
-            this.clampBallSpeed(state.ball);
-            this.clampVerticalRatio(state.ball, 0.75);
+                if (hitY >= p2Top && hitY <= p2Bottom) {
+                    this._resolvePaddleCollision(ball, state.paddle2, 2, hitY, state.paddle2.y, halfPaddle, p2Face, cfg);
 
-            this.lastHitPaddle = 2;
-            this.stats.p2.hits++;
-            io.to(this.roomId).emit('paddleHit', { player: 2, angle: finalAngle });
-        } else if (
-            (state.ball.x - cfg.BALL_RADIUS > cfg.PADDLE1_X + cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 1) ||
-            (state.ball.x + cfg.BALL_RADIUS < cfg.PADDLE2_X - cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 2)
-        ) {
-            // Reset lastHitPaddle se a bola passou do paddle
+                    ball.x = p2Face - cfg.BALL_RADIUS;
+
+                    const remainingT = (1 - tHit) * dt;
+                    ball.x += ball.vx * remainingT;
+                    ball.y += ball.vy * remainingT;
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // 6. RESET DE lastHitPaddle
+        // (quando a bola se afasta o suficiente do paddle)
+        // ─────────────────────────────────────────────
+        if (this.lastHitPaddle === 1 && ball.x - cfg.BALL_RADIUS > p1Face + 20) {
+            this.lastHitPaddle = null;
+        } else if (this.lastHitPaddle === 2 && ball.x + cfg.BALL_RADIUS < p2Face - 20) {
             this.lastHitPaddle = null;
         }
 
-        // Garante que a bola nunca fique quase horizontal demais
-        this.enforceMinVerticalAngle(state.ball, 10);
-        const leftEdge  = state.ball.x - cfg.BALL_RADIUS;
-        const rightEdge = state.ball.x + cfg.BALL_RADIUS;
+        // ─────────────────────────────────────────────
+        // 7. ÂNGULO MÍNIMO VERTICAL + VELOCIDADE
+        // ─────────────────────────────────────────────
+        this.enforceMinVerticalAngle(ball, 10);
 
-        // Log quando a bola estiver próxima da borda esquerda/direita
-        if (rightEdge < 50 || leftEdge > cfg.WIDTH - 50) {
-            console.log(
-                `[Room ${this.roomId}] DEBUG borda: x=${state.ball.x.toFixed(2)}, ` +
-                `left=${leftEdge.toFixed(2)}, right=${rightEdge.toFixed(2)}, ` +
-                `vx=${state.ball.vx.toFixed(2)}, vy=${state.ball.vy.toFixed(2)}`
-            );
-        }
-
-        // Pontuação
-        if (state.ball.x - cfg.BALL_RADIUS <= 0) {
-            // Bola saiu inteira pela ESQUERDA -> ponto P2
-            console.log(`[Room ${this.roomId}] 🚨 Bola fora (esquerda)! X+R: ${(state.ball.x + cfg.BALL_RADIUS).toFixed(2)} (Limite 0)`);
+        // ─────────────────────────────────────────────
+        // 8. PONTUAÇÃO
+        // ─────────────────────────────────────────────
+        if (ball.x - cfg.BALL_RADIUS <= 0) {
             state.scores.p2++;
             this.stats.p1.misses++;
             console.log(`[Room ${this.roomId}] Ponto para P2! Placar: ${state.scores.p1}-${state.scores.p2}`);
             this.pointScored(2);
-        } else if (state.ball.x + cfg.BALL_RADIUS >= cfg.WIDTH) {
-            // Bola saiu inteira pela DIREITA -> ponto P1
-            console.log(`[Room ${this.roomId}] 🚨 Bola fora (direita)! X-R: ${(state.ball.x - cfg.BALL_RADIUS).toFixed(2)} (Limite ${cfg.WIDTH})`);
+        } else if (ball.x + cfg.BALL_RADIUS >= cfg.WIDTH) {
             state.scores.p1++;
             this.stats.p2.misses++;
             console.log(`[Room ${this.roomId}] Ponto para P1! Placar: ${state.scores.p1}-${state.scores.p2}`);
@@ -559,22 +573,54 @@ class GameRoom {
         }
     }
 
-    clampBallSpeed(ball) {
-        const currentSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-        if (currentSpeed > this.cfg.BALL_MAX_SPEED) {
-            const ratio = this.cfg.BALL_MAX_SPEED / currentSpeed;
-            ball.vx *= ratio;
-            ball.vy *= ratio;
-            // console.log(`[Room ${this.roomId}] Ball speed clamped to MAX: ${currentSpeed.toFixed(2)} -> ${this.cfg.BALL_MAX_SPEED}`);
-        } else if (currentSpeed < this.cfg.BALL_MIN_SPEED && currentSpeed !== 0) {
-            const ratio = this.cfg.BALL_MIN_SPEED / currentSpeed;
-            ball.vx *= ratio;
-            ball.vy *= ratio;
-            // console.log(`[Room ${this.roomId}] Ball speed clamped to MIN: ${currentSpeed.toFixed(2)} -> ${this.cfg.BALL_MIN_SPEED}`);
+// ─────────────────────────────────────────────
+// HELPER: resolve bounce angle + speed após colisão confirmada
+// ─────────────────────────────────────────────
+    _resolvePaddleCollision(ball, paddle, paddleNumber, hitY, paddleY, halfPaddle, faceX, cfg) {
+        const angle = this.calculateBounceAngle(hitY, paddleY, halfPaddle);
+
+        let speed = Math.hypot(ball.vx, ball.vy);
+        speed = Math.min(speed * cfg.BALL_ACCELERATION, cfg.BALL_MAX_SPEED);
+        speed = Math.max(speed, cfg.BALL_MIN_SPEED);
+
+        // Influência da velocidade do paddle no ângulo (até ±15°)
+        const paddleInfluence = (paddle.vy / cfg.PADDLE_SPEED) * (15 * Math.PI / 180);
+        const finalAngle = angle + paddleInfluence;
+
+        if (paddleNumber === 1) {
+            // Após P1, bola sempre vai para a DIREITA
+            ball.vx =  Math.cos(finalAngle) * speed;
+            ball.vy =  Math.sin(finalAngle) * speed;
+        } else {
+            // Após P2, bola sempre vai para a ESQUERDA
+            ball.vx = -Math.cos(finalAngle) * speed;
+            ball.vy =  Math.sin(finalAngle) * speed;
         }
+
+        this.clampVerticalRatio(ball, 0.75);
+
+        this.lastHitPaddle = paddleNumber;
+
+        const statKey = paddleNumber === 1 ? 'p1' : 'p2';
+        this.stats[statKey].hits++;
+
+        const currentSpeed = Math.hypot(ball.vx, ball.vy);
+        if (currentSpeed > this.stats[statKey].maxSpeed) {
+            this.stats[statKey].maxSpeed = currentSpeed;
+        }
+
+        io.to(this.roomId).emit('paddleHit', { player: paddleNumber, angle: finalAngle });
+
+        console.log(
+            `[Room ${this.roomId}] 🏓 P${paddleNumber} hit | ` +
+            `hitY=${hitY.toFixed(1)}, angle=${(finalAngle * 180 / Math.PI).toFixed(1)}°, ` +
+            `speed=${currentSpeed.toFixed(0)}px/s`
+        );
     }
 
-    pointScored() {
+    pointScored(scoringPlayer) {
+        console.log(`[Room ${this.roomId}] Ponto para P${scoringPlayer}`);
+
         const state = this.gameState;
 
         io.to(this.roomId).emit('scoreUpdate', {
@@ -638,6 +684,17 @@ class GameRoom {
     }
 
     broadcast() {
+        const state = this.gameState;
+        const ball = state.ball;
+
+        // Só transmite se algo mudou (threshold de 0.5px)
+        const snapshot = `${ball.x.toFixed(1)},${ball.y.toFixed(1)},${state.paddle1.y.toFixed(1)},${state.paddle2.y.toFixed(1)}`;
+
+        if (snapshot === this._lastBroadcastState && !state.gameStarted === false) {
+            return; // nada mudou, não transmite
+        }
+
+        this._lastBroadcastState = snapshot;
         this.broadcastCount++;
 
         io.to(this.roomId).emit('gameState', {
@@ -916,3 +973,7 @@ process.on('SIGINT', () => {
         process.exit(1);
     }, 5000);
 });
+
+function Phaser_clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
