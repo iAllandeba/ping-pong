@@ -282,24 +282,26 @@ class GameRoom {
 
     // ✅ NOVO: Inicia o countdown no servidor
     startServerCountdown(duration, onCompleteCallback) {
-        let timeLeft = duration / 1000; // Converte para segundos
-        io.to(this.roomId).emit('serverCountdown', { time: timeLeft, totalDuration: duration });
-        console.log(`[Room ${this.roomId}] Servidor iniciando countdown: ${timeLeft}s`);
+        const startTime = Date.now();
+        const endTime = startTime + duration;
+        let lastEmittedSecond = Math.ceil(duration / 1000);
 
+        io.to(this.roomId).emit('serverCountdown', { time: lastEmittedSecond, totalDuration: duration });
         this.serverCountdownTimer = setInterval(() => {
-            timeLeft--;
-            io.to(this.roomId).emit('serverCountdown', { time: timeLeft, totalDuration: duration });
-            console.log(`[Room ${this.roomId}] Countdown: ${timeLeft}s`);
+            const remaining = endTime - Date.now();
+            const secondsLeft = Math.ceil(remaining / 1000);
 
-            if (timeLeft <= 0) {
+            if (secondsLeft !== lastEmittedSecond) {
+                lastEmittedSecond = secondsLeft;
+                io.to(this.roomId).emit('serverCountdown', { time: Math.max(0, secondsLeft), totalDuration: duration });
+            }
+
+            if (remaining <= 0) {
                 clearInterval(this.serverCountdownTimer);
                 this.serverCountdownTimer = null;
-                console.log(`[Room ${this.roomId}] Countdown finalizado.`);
-                if (onCompleteCallback) {
-                    onCompleteCallback();
-                }
+                if (onCompleteCallback) onCompleteCallback();
             }
-        }, 1000);
+        }, 100);
     }
 
     startGame() {
