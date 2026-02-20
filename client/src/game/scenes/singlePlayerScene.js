@@ -21,8 +21,6 @@ class SinglePlayerScene extends BaseGameScene {
     }
 
     update() {
-        if (!this.gameStarted) return;
-
         super.update();
         this.updateSinglePlayerFrame();
     }

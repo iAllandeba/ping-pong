@@ -72,6 +72,8 @@ class MultiplayerScene extends BaseGameScene {
     }
 
     update(time, delta) {
+        super.update();
+
         this.sendPaddleInput();
 
         const dt = delta / 1000; // segundos
