@@ -129,7 +129,6 @@ class MultiplayerScene extends BaseGameScene {
         console.log('🔌 Desconectado do servidor!');
         this.stopLatencyMonitor();
         this.stopReconnectTimer();
-        this.hideWait();
         this.hideServerCountdown();
         this.hideEndGameMenu();
 
@@ -242,7 +241,6 @@ class MultiplayerScene extends BaseGameScene {
         this.gameStarted = false;
         this.serverState = null;
         this.interpolationBuffer = [];
-        this.hideWait();
         this.hideServerCountdown();
         this.hideEndGameMenu();
         this.statusText.setText('');
@@ -254,7 +252,6 @@ class MultiplayerScene extends BaseGameScene {
         this.statusText.setText(`Jogador ${data.playerNumber} entrou na sala.`);
         if (data.playersInRoom === 2) {
             this.statusText.setText('Oponente encontrado! Preparando partida...');
-            this.hideWait();
         }
     }
 
@@ -288,7 +285,6 @@ class MultiplayerScene extends BaseGameScene {
         this.reconnectToken = data.reconnectToken;
         this.hasJoinedRoom = true;
         this.stopReconnectTimer();
-        this.hideWait();
         this.statusText.setText('Reconexão bem-sucedida!');
         this.serverState = data.gameState;
         this.applyServerState(this.serverState);
@@ -306,7 +302,6 @@ class MultiplayerScene extends BaseGameScene {
     handleGameStart(data) {
         console.log('🎉 [CLIENT] gameStart recebido:', data);
         this.gameStarted = true;
-        this.hideWait();
         this.hideEndGameMenu();
         this.statusText.setText('Partida iniciada!');
         this.serverState = data.gameState;
@@ -326,19 +321,14 @@ class MultiplayerScene extends BaseGameScene {
         this.gameStarted = state.gameStarted;
 
         this.updateScore();
-        this.hideWait();
-        this.hideServerCountdown();
     }
 
-    handleBallLaunched(data) {
-        console.log('🚀 [CLIENT] ballLaunched', data);
+    handleBallLaunched() {
+        // console.log('🚀 [CLIENT] ballLaunched');
         // O cliente já recebe a posição e velocidade da bola via gameState,
         // então este evento pode ser usado para efeitos visuais/sonoros adicionais.
         if (this.sfx.countdownGo) {
             this.sfx.countdownGo.play({ volume: 0.9 });
-        }
-        if (data && data.x !== undefined && data.y !== undefined) {
-            this.ball.setPosition(data.x, data.y);
         }
     }
 
@@ -356,7 +346,6 @@ class MultiplayerScene extends BaseGameScene {
     handleGameEnd(data) {
         console.log('🏆 [CLIENT] gameEnd recebido:', data);
         this.stopGameLogic();
-        this.hideWait();
         this.hideServerCountdown();
 
         const winnerMessage = data.winner === `PLAYER ${this.playerNumber}` ? 'VOCÊ VENCEU!' : 'VOCÊ PERDEU!';
@@ -395,7 +384,6 @@ class MultiplayerScene extends BaseGameScene {
 
     handleRematchStart(data) {
         console.log('[Multiplayer] RematchStart recebido:', data);
-        this.hideWait();
         this.hideEndGameMenu();
         this.resetGameForRematch();
         this.showWait('Nova partida!', 'Preparando...');
@@ -405,8 +393,6 @@ class MultiplayerScene extends BaseGameScene {
 
     handleServerCountdown(data) {
         console.log(`⏳ [CLIENT] serverCountdown recebido: ${data.time}`);
-
-        this.hideWait();
 
         if (data.time > 0) {
             this.showWait('Prepare-se!', `Partida começando em ${data.time}s...`);
@@ -429,23 +415,33 @@ class MultiplayerScene extends BaseGameScene {
             if (this.sfx.countdownBeep) {
                 this.sfx.countdownBeep.play({ volume: 0.7 });
             }
+
+            // Cancela tweens anteriores para não acumular animações
+            this.tweens.killTweensOf(this.countdownText);
+
             this.tweens.add({
                 targets: this.countdownText,
                 scale: 1.5,
                 duration: 200,
                 yoyo: true,
-                ease: 'Sine.easeInOut'
+                ease: 'Sine.easeInOut',
             });
         } else if (time === 0) {
             this.countdownText.setText('GO!');
-            if (this.sfx.countdownGo) {
+            this.countdownText.setColor('#ffffff');
+
+            if (this.sfx?.countdownGo) {
                 this.sfx.countdownGo.play({ volume: 0.9 });
             }
+
+            this.tweens.killTweensOf(this.countdownText);
+
             this.tweens.add({
                 targets: this.countdownText,
                 scale: 2,
                 alpha: 0,
                 duration: 500,
+                ease: 'Sine.easeOut',
                 onComplete: () => {
                     this.countdownText.setVisible(false).setAlpha(1).setScale(1);
                     this.hideWait();
@@ -458,13 +454,11 @@ class MultiplayerScene extends BaseGameScene {
         if (this.countdownText) {
             this.countdownText.setVisible(false).setAlpha(1).setScale(1);
         }
-        this.hideWait();
     }
 
     handlePlayerReconnected(data) {
         console.log('🤝 [CLIENT] PlayerReconnected:', data);
         this.statusText.setText(`Jogador ${data.playerNumber} reconectou.`);
-        this.hideWait();
         this.hideServerCountdown();
         // O servidor deve enviar um gameState atualizado ou retomar o jogo
     }
@@ -488,7 +482,6 @@ class MultiplayerScene extends BaseGameScene {
     handlePlayerDisconnected(data) {
         console.log('💔 [CLIENT] PlayerDisconnected:', data);
         this.stopGameLogic();
-        this.hideWait();
         this.hideServerCountdown();
 
         const disconnectedPlayerNumber = data.playerNumber;
@@ -521,7 +514,6 @@ class MultiplayerScene extends BaseGameScene {
 
     handleGameResumed(data) {
         console.log('✅ [CLIENT] GameResumed:', data);
-        this.hideWait();
         this.statusText.setText('Jogo retomado!');
     }
 
@@ -534,7 +526,6 @@ class MultiplayerScene extends BaseGameScene {
 
         this.clearReconnectTokenFromLocalStorage();
         localStorage.setItem(`reconnectToken_${this.roomCode}`, this.reconnectToken);
-        this.hideWait();
 
         if (data.playersInRoom === 1) {
             this.showWait('Aguardando Oponente', 'Compartilhe o código da sala: ' + this.roomCode);
@@ -833,7 +824,6 @@ class MultiplayerScene extends BaseGameScene {
             console.log('Voltando ao menu principal em 3s...');
 
             this.time.delayedCall(3000, () => {
-                this.hideWait();
                 this.disconnectSocket(); // Limpa o socket completamente
                 this.scene.stop(this.scene.key);
                 const url = new URL(window.location.href);
