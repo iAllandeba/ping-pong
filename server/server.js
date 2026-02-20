@@ -488,6 +488,8 @@ class GameRoom {
             }
         }
 
+        // Garante que a bola nunca fique quase horizontal demais
+        this.enforceMinVerticalAngle(state.ball, 10);
         const leftEdge  = state.ball.x - cfg.BALL_RADIUS;
         const rightEdge = state.ball.x + cfg.BALL_RADIUS;
 
@@ -608,6 +610,34 @@ class GameRoom {
             isPaused: this.gameState.isPaused,
             timestamp: Date.now()
         });
+    }
+
+    enforceMinVerticalAngle(ball, minAngleDeg = 10) {
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        if (speed === 0) return;
+
+        const minRad = (minAngleDeg * Math.PI) / 180;
+        let angle = Math.atan2(ball.vy, ball.vx);
+
+        // Normaliza para [-PI, PI]
+        // Checa se está muito próximo de horizontal (0° ou 180°)
+        const absAngle = Math.abs(angle);
+        const nearRight = absAngle < minRad;                   // ~0°
+        const nearLeft  = Math.abs(absAngle - Math.PI) < minRad; // ~180°
+
+        if (nearRight) {
+            // indo quase reto para direita
+            const sign = ball.vy >= 0 ? 1 : -1;
+            angle = sign * minRad;
+            ball.vx = Math.cos(angle) * speed;
+            ball.vy = Math.sin(angle) * speed;
+        } else if (nearLeft) {
+            // indo quase reto para esquerda
+            const sign = ball.vy >= 0 ? 1 : -1;
+            angle = Math.PI - sign * minRad;
+            ball.vx = Math.cos(angle) * speed;
+            ball.vy = Math.sin(angle) * speed;
+        }
     }
 }
 
