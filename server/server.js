@@ -575,7 +575,9 @@ class GameRoom {
         }
     }
 
-    pointScored() {
+    pointScored(scoringPlayer) {
+        console.log(`[Room ${this.roomId}] Ponto para P${scoringPlayer}`);
+
         const state = this.gameState;
 
         io.to(this.roomId).emit('scoreUpdate', {
