@@ -475,13 +475,17 @@ class GameRoom {
             this.lastHitPaddle = 2;
             this.stats.p2.hits++;
             io.to(this.roomId).emit('paddleHit', { player: 2 });
-            // console.log(`[Room ${this.roomId}] P2 hit! Ball VX: ${state.ball.vx}, VY: ${state.ball.vy}`);
-        } else if (
-            (state.ball.x - cfg.BALL_RADIUS > cfg.PADDLE1_X + cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 1) ||
-            (state.ball.x + cfg.BALL_RADIUS < cfg.PADDLE2_X - cfg.PADDLE_WIDTH / 2 && this.lastHitPaddle === 2)
-        ) {
-            // Reset lastHitPaddle se a bola passou do paddle
-            this.lastHitPaddle = null;
+            console.debug(`[Room ${this.roomId}] P2 hit! Ball VX: ${state.ball.vx}, VY: ${state.ball.vy}`);
+        } else {
+            // Reset quando a bola cruza o meio da tela
+            const midX = cfg.WIDTH / 2;
+            if (
+                (this.lastHitPaddle === 1 && state.ball.x > midX) ||
+                (this.lastHitPaddle === 2 && state.ball.x < midX)
+            ) {
+                console.debug(`[Room ${this.roomId}] lastHitPaddle resetado após cruzar o meio. Era: ${this.lastHitPaddle}`);
+                this.lastHitPaddle = null;
+            }
         }
 
         const leftEdge  = state.ball.x - cfg.BALL_RADIUS;
