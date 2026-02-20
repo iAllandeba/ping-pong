@@ -47,6 +47,7 @@ class GameRoom {
         this.disconnectedPlayers = new Map(); // playerNumber -> { reconnectToken, disconnectTime, playerData, timeoutId }
         this.savedBallState = null; // ✅ Salva o estado da bola ao pausar
         this.broadcastCount = 0;
+        this._lastBroadcastState = null;
 
         this.serverCountdownTimer = null; // ✅ Novo: Timer para o countdown do servidor
     }
@@ -638,6 +639,17 @@ class GameRoom {
     }
 
     broadcast() {
+        const state = this.gameState;
+        const ball = state.ball;
+
+        // Só transmite se algo mudou (threshold de 0.5px)
+        const snapshot = `${ball.x.toFixed(1)},${ball.y.toFixed(1)},${state.paddle1.y.toFixed(1)},${state.paddle2.y.toFixed(1)}`;
+
+        if (snapshot === this._lastBroadcastState && !state.gameStarted === false) {
+            return; // nada mudou, não transmite
+        }
+
+        this._lastBroadcastState = snapshot;
         this.broadcastCount++;
 
         io.to(this.roomId).emit('gameState', {
