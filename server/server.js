@@ -394,6 +394,26 @@ class GameRoom {
 
     updateGamePhysics(dt) {
         const state = this.gameState;
+        if (!state.gameStarted || state.isPaused) {
+            return;
+        }
+
+        // velocidade escalar
+        const speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
+        let steps = 1;
+
+        if (speed > 800) {
+            steps = 3; // subdivide em 3 passos em alta velocidade
+        }
+
+        const subDt = dt / steps;
+        for (let i = 0; i < steps; i++) {
+            this._physicsStep(subDt);
+        }
+    }
+
+    _physicsStep(dt) {
+        const state = this.gameState;
         const cfg = this.cfg;
 
         if (!state.gameStarted || state.isPaused) {
