@@ -51,20 +51,27 @@ class GameRoom {
         this.serverCountdownTimer = null; // ✅ Novo: Timer para o countdown do servidor
     }
 
-    // ✅ Novo método para criar/resetar o estado inicial do jogo
     createInitialGameState() {
         return {
-            ball: {
-                x: this.cfg.WIDTH / 2,
+            ball: this.getInitialBallState(),
+            paddle1: this.getInitialPaddleState(),
+            paddle2: this.getInitialPaddleState(),
+            scores: { p1: 0, p2: 0 },
+            gameStarted: false,
+            isPaused: false
+        };
+    }
+
+    getInitialPaddleState() {
+        return { y: this.cfg.HEIGHT / 2, vy: 0 };
+    }
+
+    getInitialBallState() {
+        return {
+            x: this.cfg.WIDTH / 2,
                 y: this.cfg.HEIGHT / 2,
                 vx: 0,
                 vy: 0
-            },
-            paddle1: { y: this.cfg.HEIGHT / 2, vy: 0 },
-            paddle2: { y: this.cfg.HEIGHT / 2, vy: 0 },
-            scores: { p1: 0, p2: 0 },
-            gameStarted: false, // ✅ Flag principal para indicar se o jogo está rodando
-            isPaused: false // ✅ Flag para indicar se o jogo está em pausa (ex: por desconexão)
         };
     }
 
@@ -538,11 +545,11 @@ class GameRoom {
         }
 
         // Pausa o jogo brevemente e reseta a bola para o centro após um ponto
-        //TODO: Reposicionar os paddles também
-        state.ball.vx = 0;
-        state.ball.vy = 0;
-        state.ball.x = this.cfg.WIDTH / 2;
-        state.ball.y = this.cfg.HEIGHT / 2;
+        state.ball = this.getInitialBallState();
+
+        state.paddle1 = this.getInitialPaddleState();
+        state.paddle2 = this.getInitialPaddleState();
+
         this.lastHitPaddle = null;
         state.gameStarted = false; // Pausa o jogo para o countdown de lançamento
 
