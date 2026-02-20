@@ -470,14 +470,21 @@ class GameRoom {
             state.ball.y - cfg.BALL_RADIUS <= state.paddle1.y + halfPaddle &&
             this.lastHitPaddle !== 1 // Evita múltiplas colisões no mesmo tick
         ) {
-            state.ball.vx *= -1; // Inverte direção X
-            state.ball.vx *= cfg.BALL_ACCELERATION; // Acelera a bola
-            state.ball.vy += state.paddle1.vy * 0.2; // Adiciona um pouco da velocidade do paddle
+            const angle = this.calculateBounceAngle(state.ball.y, state.paddle1.y, halfPaddle);
+
+            // velocidade atual com aceleração
+            let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
+            speed *= cfg.BALL_ACCELERATION;
+
+            // após bater no P1, bola sempre vai para a direita (vx > 0)
+            state.ball.vx = Math.cos(angle) * speed;
+            state.ball.vy = Math.sin(angle) * speed;
+
             this.clampBallSpeed(state.ball);
             this.lastHitPaddle = 1;
             this.stats.p1.hits++;
-            io.to(this.roomId).emit('paddleHit', { player: 1 });
-            // console.log(`[Room ${this.roomId}] P1 hit! Ball VX: ${state.ball.vx}, VY: ${state.ball.vy}`);
+
+            io.to(this.roomId).emit('paddleHit', { player: 1, angle });
         }
         // Paddle 2
         else if (
@@ -488,14 +495,20 @@ class GameRoom {
             state.ball.y - cfg.BALL_RADIUS <= state.paddle2.y + halfPaddle &&
             this.lastHitPaddle !== 2 // Evita múltiplas colisões no mesmo tick
         ) {
-            state.ball.vx *= -1; // Inverte direção X
-            state.ball.vx *= cfg.BALL_ACCELERATION; // Acelera a bola
-            state.ball.vy += state.paddle2.vy * 0.2; // Adiciona um pouco da velocidade do paddle
+            const angle = this.calculateBounceAngle(state.ball.y, state.paddle2.y, halfPaddle);
+
+            let speed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy);
+            speed *= cfg.BALL_ACCELERATION;
+
+            // após bater no P2, bola sempre vai para a esquerda (vx < 0)
+            state.ball.vx = -Math.cos(angle) * speed;
+            state.ball.vy = Math.sin(angle) * speed;
+
             this.clampBallSpeed(state.ball);
             this.lastHitPaddle = 2;
             this.stats.p2.hits++;
-            io.to(this.roomId).emit('paddleHit', { player: 2 });
-            console.debug(`[Room ${this.roomId}] P2 hit! Ball VX: ${state.ball.vx}, VY: ${state.ball.vy}`);
+
+            io.to(this.roomId).emit('paddleHit', { player: 2, angle });
         } else {
             // Reset quando a bola cruza o meio da tela
             const midX = cfg.WIDTH / 2;
@@ -658,6 +671,17 @@ class GameRoom {
             ball.vx = Math.cos(angle) * speed;
             ball.vy = Math.sin(angle) * speed;
         }
+    }
+
+    calculateBounceAngle(ballY, paddleY, paddleHalfHeight) {
+        // posição relativa no paddle: -1 (topo) ... 0 (meio) ... +1 (base)
+        const relative = (ballY - paddleY) / paddleHalfHeight;
+        const clamped = Math.max(-1, Math.min(1, relative));
+
+        const MAX_BOUNCE_ANGLE_DEG = 40;
+        const maxRad = (MAX_BOUNCE_ANGLE_DEG * Math.PI) / 180;
+
+        return clamped * maxRad; // -maxRad ... +maxRad
     }
 }
 
