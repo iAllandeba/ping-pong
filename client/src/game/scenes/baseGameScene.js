@@ -62,6 +62,7 @@
 
     stopGameLogic() {
         this.gameStarted = false;
+
         if (this.ball && this.ball.body) {
             this.ball.body.setVelocity(0, 0);
             this.ball.body.enable = false;
@@ -78,8 +79,6 @@
             this.ballTrail.clear();
             this.trailPoints = [];
         }
-        this.hideWait();
-        this.countdownText.setVisible(false);
     }
 
     createGameObjects() {
