@@ -9,7 +9,6 @@ class MultiplayerScene extends BaseGameScene {
         this.onPlayerJoinedHandler = this.handlePlayerJoined.bind(this);
         this.onPlayerLeftHandler = this.handlePlayerLeft.bind(this);
         this.onRoomFullHandler = this.handleRoomFull.bind(this);
-        this.onRoomNotFoundHandler = this.handleRoomNotFound.bind(this);
         this.onReconnectSuccessHandler = this.handleReconnectSuccess.bind(this);
         this.onReconnectFailedHandler = this.handleReconnectFailed.bind(this);
         this.onGameStartHandler = this.handleGameStart.bind(this);
@@ -173,7 +172,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.on('playerJoined', this.onPlayerJoinedHandler);
         this.socket.on('playerLeft', this.onPlayerLeftHandler);
         this.socket.on('roomFull', this.onRoomFullHandler);
-        this.socket.on('roomNotFound', this.onRoomNotFoundHandler);
         this.socket.on('reconnectSuccess', this.onReconnectSuccessHandler);
         this.socket.on('reconnectFailed', this.onReconnectFailedHandler);
         this.socket.on('gameStart', this.onGameStartHandler);
@@ -206,7 +204,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.off('playerJoined', this.onPlayerJoinedHandler);
         this.socket.off('playerLeft', this.onPlayerLeftHandler);
         this.socket.off('roomFull', this.onRoomFullHandler);
-        this.socket.off('roomNotFound', this.onRoomNotFoundHandler);
         this.socket.off('reconnectSuccess', this.onReconnectSuccessHandler);
         this.socket.off('reconnectFailed', this.onReconnectFailedHandler);
         this.socket.off('gameStart', this.onGameStartHandler);
@@ -272,12 +269,6 @@ class MultiplayerScene extends BaseGameScene {
         this.time.delayedCall(3000, () => {
             this.backToMenuScene();
         });
-    }
-
-    handleRoomNotFound(data) {
-        console.log('❌ [CLIENT] RoomNotFound:', data.message);
-        this.showWait('Sala Não Encontrada', data.message);
-        this.backToMenuScene();
     }
 
     handleReconnectSuccess(data) {
@@ -544,9 +535,9 @@ class MultiplayerScene extends BaseGameScene {
         this.showWait('Aguardando Oponente', data);
     }
 
-    handlePaddleHit(player) {
+    handlePaddleHit(paddleNumber) {
         // console.log('💥 [CLIENT] PaddleHit:', player); // DEBUG
-        this.playPaddleHitEffects(player.paddleNumber);
+        this.playPaddleHitEffects(paddleNumber);
     }
 
     handleScoreUpdate(data) {

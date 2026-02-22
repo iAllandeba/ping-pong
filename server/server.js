@@ -135,7 +135,7 @@ class GameRoom {
         io.to(this.roomId).emit('playerDisconnected', {
             playerNumber,
             waitingReconnect: true,
-            gameState: this.getFullGameState() // ✅ Envia o estado atual (pausado) para o outro cliente
+            gameState: this.getFullGameState()
         });
 
         // Timeout para reconexão
@@ -215,8 +215,8 @@ class GameRoom {
     getFullGameState() {
         return Object.freeze({
             ball: Object.freeze({ ...this.gameState.ball }),
-            paddle1: Object.freeze({ y: this.gameState.paddle1 }),
-            paddle2: Object.freeze({ y: this.gameState.paddle2 }),
+            paddle1: Object.freeze({ ...this.gameState.paddle1 }),
+            paddle2: Object.freeze({ ...this.gameState.paddle2 }),
             scores: Object.freeze({ ...this.gameState.scores }),
             gameStarted: this.gameState.gameStarted,
             isPaused: this.gameState.isPaused,
@@ -609,7 +609,7 @@ class GameRoom {
             this.stats[statKey].maxSpeed = currentSpeed;
         }
 
-        io.to(this.roomId).emit('paddleHit', { player: paddleNumber, angle: finalAngle });
+        io.to(this.roomId).emit('paddleHit', { paddleNumber, angle: finalAngle });
 
         console.log(
             `[Room ${this.roomId}] 🏓 P${paddleNumber} hit | ` +
@@ -834,7 +834,7 @@ io.on('connection', (socket) => {
             reconnectToken: result.reconnectToken,
             playersInRoom: room.players.length,
             gameConfig: GAME_CONFIG,
-            gameState: room.getFullGameState() // Envia o estado atual da sala (pode estar pausado ou aguardando)
+            gameState: room.getFullGameState()
         });
 
         if (room.players.length === 1) {
@@ -843,6 +843,12 @@ io.on('connection', (socket) => {
 
         if (room.players.length === 2) {
             console.log(`🎮 Sala ${roomId} completa! Iniciando partida...`);
+
+            socket.to(roomId).emit('playerJoined', {
+                playerNumber: result.playerNumber,
+                playersInRoom: room.players.length
+            });
+
             io.to(roomId).emit('gameStart', {
                 message: 'Ambos conectados, iniciando partida.'
             });
@@ -898,6 +904,14 @@ io.on('connection', (socket) => {
                 room.handleDisconnect(socket.id);
             }
         });
+    });
+
+    socket.on('leaveRoom', () => {
+        const room = [...rooms.values()].find(r => r.isSocketInRoom(socket.id));
+        if (!room) return;
+        const player = room.players.find(p => p.id === socket.id);
+        io.to(room.roomId).emit('playerLeft', { playerNumber: player.number });
+        room.stopGame();
     });
 });
 
