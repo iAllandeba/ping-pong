@@ -145,17 +145,7 @@ class GameRoom {
 
         this.players.splice(playerIndex, 1);
 
-        if (this.gameState.gameStarted && !this.gameState.isPaused) {
-            this.pauseGame();
-            console.log(`[Room ${this.roomId}] ⏸️ Jogo pausado após desconexão do P${playerNumber}`);
-        }
-
-        if (this.serverCountdownTimer) {
-            clearInterval(this.serverCountdownTimer);
-            this.serverCountdownTimer = null;
-            io.to(this.roomId).emit('countdownCancelled');
-            console.log(`[Room ${this.roomId}] ❌ Countdown cancelado devido a desconexão.`);
-        }
+        this.pauseGame();
 
         io.to(this.roomId).emit('playerDisconnected', {
             playerNumber,
@@ -236,8 +226,8 @@ class GameRoom {
     getFullGameState() {
         return Object.freeze({
             ball: Object.freeze({ ...this.gameState.ball }),
-            paddle1: Object.freeze({ y: this.gameState.paddle1 }),
-            paddle2: Object.freeze({ y: this.gameState.paddle2 }),
+            paddle1: Object.freeze({ ...this.gameState.paddle1 }),
+            paddle2: Object.freeze({ ...this.gameState.paddle2 }),
             scores: Object.freeze({ ...this.gameState.scores }),
             gameStarted: this.gameState.gameStarted,
             isPaused: this.gameState.isPaused,
@@ -249,49 +239,91 @@ class GameRoom {
     // CONTROLE DE FLUXO DO JOGO
     // ─────────────────────────────────────────────
     pauseGame() {
-        if (this.gameState.gameStarted && !this.gameState.isPaused) {
-            this.gameState.isPaused = true;
-            this.gameState.gameStarted = false;
-            this.savedBallState = { ...this.gameState.ball };
-            this.gameState.ball.vx = 0;
-            this.gameState.ball.vy = 0;
-            clearInterval(this.gameLoop);
-            this.gameLoop = null;
-            console.log(`[Room ${this.roomId}] Jogo pausado.`);
-            this.broadcast();
+        if (this.gameState.isPaused) {
+            console.log(`[Room ${this.roomId}] Já pausado, ignorando pauseGame()`);
+            return;
         }
+
+        this.gameState.isPaused = true;
+        this.gameState.gameStarted = false;
+
+        this.savedBallState = { ...this.gameState.ball };
+        this.savedPaddle1State = { ...this.gameState.paddle1 };
+        this.savedPaddle2State = { ...this.gameState.paddle2 };
+
+        this.gameState.ball.vx = 0;
+        this.gameState.ball.vy = 0;
+
+        clearInterval(this.gameLoop);
+        this.gameLoop = null;
+
+        if (this.serverCountdownTimer) {
+            clearInterval(this.serverCountdownTimer);
+            this.serverCountdownTimer = null;
+            io.to(this.roomId).emit('countdownCancelled');
+        }
+        console.log(`[Room ${this.roomId}] ⏸️ Pausado. Bola: x=${this.savedBallState.x.toFixed(2)}, vx=${this.savedBallState.vx.toFixed(2)}`);
+        this.broadcast();
     }
 
     resumeGame() {
-        if (this.gameState.isPaused && this.players.length === 2) {
-            console.log(`[Room ${this.roomId}] ▶️ Jogo retomando...`);
-            io.to(this.roomId).emit('gameResuming', { countdown: this.cfg.RESUME_COUNTDOWN / 1000 });
+        if (!this.gameState.isPaused || this.players.length < 2) return;
+
+        console.log(`[Room ${this.roomId}] ▶️ Jogo retomando...`);
+        io.to(this.roomId).emit('gameResuming', { countdown: this.cfg.RESUME_COUNTDOWN / 1000 });
+
+        setTimeout(() => {
+            if (this.gameLoop) {
+                console.warn(`[Room ${this.roomId}] gameLoop já ativo durante retomada. Ignorando.`);
+                return; // Já retomou
+            }
+
+            this.gameState.isPaused = false;
+            this.gameState.gameStarted = true; // O jogo está rodando novamente
+
+            // Restaura a bola para onde estava ou relança se não houver estado salvo
+            if (this.savedBallState) {
+                this.gameState.ball = { ...this.savedBallState };
+
+                this.gameState.paddle1 = this.savedPaddle1State
+                    ? { ...this.savedPaddle1State }
+                    : this.gameState.paddle1;
+
+                this.gameState.paddle2 = this.savedPaddle2State
+                    ? { ...this.savedPaddle2State }
+                    : this.gameState.paddle2;
+
+                this.savedBallState    = null;
+                this.savedPaddle1State = null;
+                this.savedPaddle2State = null;
+                console.log(`[Room ${this.roomId}] Bola restaurada para: x=${this.gameState.ball.x}, y=${this.gameState.ball.y}`);
+            } else {
+                this.launchBall();
+                console.log(`[Room ${this.roomId}] Bola relançada após retomada.`);
+            }
+
+            this.lastUpdate = Date.now();
+
+            io.to(this.roomId).emit('gameResumed', {
+                gameState: this.getFullGameState()
+            });
 
             setTimeout(() => {
-                if (this.gameLoop) {
-                    console.warn(`[Room ${this.roomId}] gameLoop já ativo durante retomada. Ignorando.`);
-                    return; // Já retomou
-                }
+                if (this.gameLoop) return;
 
-                this.gameState.isPaused = false;
-                this.gameState.gameStarted = true;
+                this.lastUpdate = Date.now(); // ancora de novo após o delay
+                this.gameLoop = setInterval(() => {
+                    const now = Date.now();
+                    const dt  = Math.min((now - this.lastUpdate) / 1000, 0.05); // ✅ cap de dt
+                    this.updateGamePhysics(dt);
+                    this.lastUpdate = now;
+                    this.broadcast();
+                }, this.cfg.FRAME_TIME);
 
-                if (this.savedBallState) {
-                    this.gameState.ball = { ...this.savedBallState };
-                    this.savedBallState = null;
-                    console.log(`[Room ${this.roomId}] Bola restaurada para: x=${this.gameState.ball.x}, y=${this.gameState.ball.y}`);
-                } else {
-                    this.launchBall();
-                    console.log(`[Room ${this.roomId}] Bola relançada após retomada.`);
-                }
+                console.log(`[Room ${this.roomId}] ✅ gameLoop iniciado.`);
+            }, 100); // 100ms de margem para o cliente processar
 
-                this._startGameLoop();
-
-                io.to(this.roomId).emit('gameResumed', { gameState: this.getFullGameState() });
-                this.broadcast();
-                console.log(`[Room ${this.roomId}] ✅ Jogo retomado.`);
-            }, this.cfg.RESUME_COUNTDOWN);
-        }
+        }, this.cfg.RESUME_COUNTDOWN);
     }
 
     startServerCountdown(duration, onCompleteCallback) {
@@ -386,6 +418,8 @@ class GameRoom {
         this.gameState.ball.vx = 0;
         this.gameState.ball.vy = 0;
         this.savedBallState = null;
+        this.savedPaddle1State = null;
+        this.savedPaddle2State = null;
         this.lastHitPaddle = null;
 
         this.disconnectedPlayers.forEach(dp => clearTimeout(dp.timeoutId));
@@ -437,6 +471,18 @@ class GameRoom {
         } else {
             this.gameState.scores.p2++;
         }
+
+        io.to(this.roomId).emit('paddleHit', { paddleNumber, angle: finalAngle });
+
+        console.log(
+            `[Room ${this.roomId}] 🏓 P${paddleNumber} hit | ` +
+            `hitY=${hitY.toFixed(1)}, angle=${(finalAngle * 180 / Math.PI).toFixed(1)}°, ` +
+            `speed=${currentSpeed.toFixed(0)}px/s`
+        );
+    }
+
+    pointScored(scoringPlayer) {
+        console.log(`[Room ${this.roomId}] Ponto para P${scoringPlayer}`);
 
         const state = this.gameState;
         console.log(`[Room ${this.roomId}] 📊 Placar: P1=${state.scores.p1} x P2=${state.scores.p2}`);
@@ -603,8 +649,21 @@ io.on('connection', (socket) => {
 
         if (room.players.length === 2) {
             console.log(`🎮 Sala ${roomId} completa! Iniciando partida...`);
-            io.to(roomId).emit('gameStart', { message: 'Ambos conectados, iniciando partida.' });
-            room.startGame();
+
+            socket.to(roomId).emit('playerJoined', {
+                playerNumber: result.playerNumber,
+                playersInRoom: room.players.length
+            });
+
+            io.to(roomId).emit('gameStart', {
+                message: 'Ambos conectados, iniciando partida.'
+            });
+
+            if (room.gameState.isPaused) {
+                room.resumeGame();
+            } else {
+                room.startGame();
+            }
         }
     });
 
@@ -647,6 +706,14 @@ io.on('connection', (socket) => {
                 break;
             }
         }
+    });
+
+    socket.on('leaveRoom', () => {
+        const room = [...rooms.values()].find(r => r.isSocketInRoom(socket.id));
+        if (!room) return;
+        const player = room.players.find(p => p.id === socket.id);
+        io.to(room.roomId).emit('playerLeft', { playerNumber: player.number });
+        room.stopGame();
     });
 });
 
