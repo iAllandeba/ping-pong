@@ -28,7 +28,6 @@ class MultiplayerScene extends BaseGameScene {
         this.onJoinedRoomHandler = this.handleJoinedRoom.bind(this);
         this.onWaitingForOpponentHandler = this.handleWaitingForOpponent.bind(this);
         this.onPaddleHitHandler = this.handlePaddleHit.bind(this);
-        this.onScoreUpdateHandler = this.handleScoreUpdate.bind(this);
     }
 
     async init(data) {
@@ -193,7 +192,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.on('joinedRoom', this.onJoinedRoomHandler);
         this.socket.on('waitingForOpponent', this.onWaitingForOpponentHandler);
         this.socket.on('paddleHit', this.onPaddleHitHandler);
-        this.socket.on('scoreUpdate', this.onScoreUpdateHandler);
 
         console.log('📡 Registrando listeners de socket...');
     }
@@ -225,7 +223,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.off('joinedRoom', this.onJoinedRoomHandler);
         this.socket.off('waitingForOpponent', this.onWaitingForOpponentHandler);
         this.socket.off('paddleHit', this.onPaddleHitHandler);
-        this.socket.off('scoreUpdate', this.onScoreUpdateHandler);
 
         console.log('🧹 Removendo listeners de socket...');
     }
@@ -555,13 +552,6 @@ class MultiplayerScene extends BaseGameScene {
     handlePaddleHit(paddleNumber) {
         // console.log('💥 [CLIENT] PaddleHit:', player); // DEBUG
         this.playPaddleHitEffects(paddleNumber);
-    }
-
-    handleScoreUpdate(data) {
-        // console.log('📊 [CLIENT] ScoreUpdate:', data); // DEBUG
-        this.score1 = data.scores.p1;
-        this.score2 = data.scores.p2;
-        this.updateScore();
     }
 
     startLatencyMonitor() {
