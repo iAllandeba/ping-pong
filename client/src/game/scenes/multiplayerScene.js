@@ -78,19 +78,21 @@ class MultiplayerScene extends BaseGameScene {
         const dt = delta / 1000; // segundos
 
         // Predição simples do paddle local
-        if (this.playerNumber === 1) {
-            this.paddle1.y += this.lastInputSent.vy * dt;
-        } else if (this.playerNumber === 2) {
-            this.paddle2.y += this.lastInputSent.vy * dt;
-        }
+        if (this.gameStarted && this.playerNumber) {
+            if (this.playerNumber === 1) {
+                this.paddle1.y += this.lastInputSent.vy * dt;
+            } else if (this.playerNumber === 2) {
+                this.paddle2.y += this.lastInputSent.vy * dt;
+            }
 
-        // Mantém o paddle dentro da tela
-        const paddle = this.playerNumber === 1 ? this.paddle1 : this.paddle2;
-        if (paddle) {
-            const halfHeight = paddle.displayHeight / 2;
-            const minY = halfHeight;
-            const maxY = this.game.config.height - halfHeight;
-            paddle.y = Phaser.Math.Clamp(paddle.y, minY, maxY);
+            // Mantém o paddle dentro da tela
+            const paddle = this.playerNumber === 1 ? this.paddle1 : this.paddle2;
+            if (paddle) {
+                const halfHeight = paddle.displayHeight / 2;
+                const minY = halfHeight;
+                const maxY = this.game.config.height - halfHeight;
+                paddle.y = Phaser.Math.Clamp(paddle.y, minY, maxY);
+            }
         }
 
         // A interpolação será feita dentro de updateFromServer
@@ -278,6 +280,10 @@ class MultiplayerScene extends BaseGameScene {
         this.reconnectToken = data.reconnectToken;
         this.hasJoinedRoom = true;
         this.stopReconnectTimer();
+
+        this.hideEndGameMenu();
+        this.hideWait();
+
         this.statusText.setText('Reconexão bem-sucedida!');
         this.serverState = data.gameState;
         this.applyServerState(this.serverState);
@@ -454,6 +460,9 @@ class MultiplayerScene extends BaseGameScene {
     handlePlayerReconnected(data) {
         console.log('🤝 [CLIENT] PlayerReconnected:', data);
         this.statusText.setText(`Jogador ${data.playerNumber} reconectou.`);
+
+        this.hideEndGameMenu();
+        this.hideWait();
         this.hideServerCountdown();
         // O servidor deve enviar um gameState atualizado ou retomar o jogo
     }
@@ -504,12 +513,18 @@ class MultiplayerScene extends BaseGameScene {
 
     handleGameResuming(data) {
         console.log('▶️ [CLIENT] GameResuming:', data);
+        this.hideEndGameMenu();
+
         this.showWait('Jogo Retomando', 'Aguardando sincronização...');
     }
 
     handleGameResumed(data) {
         console.log('✅ [CLIENT] GameResumed:', data);
         this.statusText.setText('Jogo retomado!');
+
+        this.hideWait();
+        this.hideEndGameMenu();
+        this.hideServerCountdown();
     }
 
     handleJoinedRoom(data) {
@@ -587,6 +602,7 @@ class MultiplayerScene extends BaseGameScene {
         // console.debug(`✅ sendPaddleInput para o servidor. this.playerNumber=${this.playerNumber}`);
 
         if (!this.socket || !this.playerNumber) return;
+        if (!this.gameStarted) return;
 
         let vy = 0;
         if (this.keys.W.isDown || this.cursors.up.isDown) {
