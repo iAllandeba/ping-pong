@@ -315,7 +315,7 @@ class GameRoom {
                 this.gameLoop = setInterval(() => {
                     const now = Date.now();
                     const dt  = Math.min((now - this.lastUpdate) / 1000, 0.05); // ✅ cap de dt
-                    this.updateGamePhysics(dt);
+                    this.physics.update(this.gameState, dt);
                     this.lastUpdate = now;
                     this.broadcast();
                 }, this.cfg.FRAME_TIME);
@@ -464,27 +464,17 @@ class GameRoom {
     // ─────────────────────────────────────────────
     // PONTUAÇÃO
     // ─────────────────────────────────────────────
-    pointScored(scoringPlayer) {
-        console.log(`[Room ${this.roomId}] 📍 Ponto para P${scoringPlayer}`);
-        if (scoringPlayer === 1) {
-            this.gameState.scores.p1++;
-        } else {
-            this.gameState.scores.p2++;
-        }
-
-        io.to(this.roomId).emit('paddleHit', { paddleNumber, angle: finalAngle });
-
-        console.log(
-            `[Room ${this.roomId}] 🏓 P${paddleNumber} hit | ` +
-            `hitY=${hitY.toFixed(1)}, angle=${(finalAngle * 180 / Math.PI).toFixed(1)}°, ` +
-            `speed=${currentSpeed.toFixed(0)}px/s`
-        );
-    }
 
     pointScored(scoringPlayer) {
         console.log(`[Room ${this.roomId}] Ponto para P${scoringPlayer}`);
-
         const state = this.gameState;
+
+        if (scoringPlayer === 1) {
+            state.scores.p1++;
+        } else {
+            state.scores.p2++;
+        }
+
         console.log(`[Room ${this.roomId}] 📊 Placar: P1=${state.scores.p1} x P2=${state.scores.p2}`);
 
         io.to(this.roomId).emit('pointScored', {
@@ -560,13 +550,7 @@ class GameRoom {
         this.broadcastCount++;
 
         io.to(this.roomId).emit('gameState', {
-            ball: state.ball,
-            paddle1: { y: state.paddle1.y },
-            paddle2: { y: state.paddle2.y },
-            scores: state.scores,
-            gameStarted: state.gameStarted,
-            isPaused: state.isPaused,
-            timestamp: Date.now()
+            gameState: this.getFullGameState()
         });
     }
 }

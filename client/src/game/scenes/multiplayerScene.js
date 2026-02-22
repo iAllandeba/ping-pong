@@ -305,17 +305,17 @@ class MultiplayerScene extends BaseGameScene {
         this.applyServerState(this.serverState);
     }
 
-    handleGameState(state) {
+    handleGameState(data) {
         // console.log('🔄 [CLIENT] gameState', state); // DEBUG
-        this.serverState = state;
-        this.interpolationBuffer.push(state);
+        this.serverState = data.gameState;
+        this.interpolationBuffer.push(data.gameState);
 
         const maxStates = this.BUFFER_SIZE;
         while (this.interpolationBuffer.length > maxStates) {
             this.interpolationBuffer.shift();
         }
 
-        this.gameStarted = state.gameStarted;
+        this.gameStarted = data.gameState.gameStarted;
 
         this.updateScore();
     }
