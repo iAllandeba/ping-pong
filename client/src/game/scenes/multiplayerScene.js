@@ -9,7 +9,6 @@ class MultiplayerScene extends BaseGameScene {
         this.onPlayerJoinedHandler = this.handlePlayerJoined.bind(this);
         this.onPlayerLeftHandler = this.handlePlayerLeft.bind(this);
         this.onRoomFullHandler = this.handleRoomFull.bind(this);
-        this.onRoomNotFoundHandler = this.handleRoomNotFound.bind(this);
         this.onReconnectSuccessHandler = this.handleReconnectSuccess.bind(this);
         this.onReconnectFailedHandler = this.handleReconnectFailed.bind(this);
         this.onGameStartHandler = this.handleGameStart.bind(this);
@@ -29,7 +28,6 @@ class MultiplayerScene extends BaseGameScene {
         this.onJoinedRoomHandler = this.handleJoinedRoom.bind(this);
         this.onWaitingForOpponentHandler = this.handleWaitingForOpponent.bind(this);
         this.onPaddleHitHandler = this.handlePaddleHit.bind(this);
-        this.onScoreUpdateHandler = this.handleScoreUpdate.bind(this);
     }
 
     async init(data) {
@@ -79,19 +77,21 @@ class MultiplayerScene extends BaseGameScene {
         const dt = delta / 1000; // segundos
 
         // Predição simples do paddle local
-        if (this.playerNumber === 1) {
-            this.paddle1.y += this.lastInputSent.vy * dt;
-        } else if (this.playerNumber === 2) {
-            this.paddle2.y += this.lastInputSent.vy * dt;
-        }
+        if (this.gameStarted && this.playerNumber) {
+            if (this.playerNumber === 1) {
+                this.paddle1.y += this.lastInputSent.vy * dt;
+            } else if (this.playerNumber === 2) {
+                this.paddle2.y += this.lastInputSent.vy * dt;
+            }
 
-        // Mantém o paddle dentro da tela
-        const paddle = this.playerNumber === 1 ? this.paddle1 : this.paddle2;
-        if (paddle) {
-            const halfHeight = paddle.displayHeight / 2;
-            const minY = halfHeight;
-            const maxY = this.game.config.height - halfHeight;
-            paddle.y = Phaser.Math.Clamp(paddle.y, minY, maxY);
+            // Mantém o paddle dentro da tela
+            const paddle = this.playerNumber === 1 ? this.paddle1 : this.paddle2;
+            if (paddle) {
+                const halfHeight = paddle.displayHeight / 2;
+                const minY = halfHeight;
+                const maxY = this.game.config.height - halfHeight;
+                paddle.y = Phaser.Math.Clamp(paddle.y, minY, maxY);
+            }
         }
 
         // A interpolação será feita dentro de updateFromServer
@@ -173,7 +173,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.on('playerJoined', this.onPlayerJoinedHandler);
         this.socket.on('playerLeft', this.onPlayerLeftHandler);
         this.socket.on('roomFull', this.onRoomFullHandler);
-        this.socket.on('roomNotFound', this.onRoomNotFoundHandler);
         this.socket.on('reconnectSuccess', this.onReconnectSuccessHandler);
         this.socket.on('reconnectFailed', this.onReconnectFailedHandler);
         this.socket.on('gameStart', this.onGameStartHandler);
@@ -193,7 +192,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.on('joinedRoom', this.onJoinedRoomHandler);
         this.socket.on('waitingForOpponent', this.onWaitingForOpponentHandler);
         this.socket.on('paddleHit', this.onPaddleHitHandler);
-        this.socket.on('scoreUpdate', this.onScoreUpdateHandler);
 
         console.log('📡 Registrando listeners de socket...');
     }
@@ -206,7 +204,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.off('playerJoined', this.onPlayerJoinedHandler);
         this.socket.off('playerLeft', this.onPlayerLeftHandler);
         this.socket.off('roomFull', this.onRoomFullHandler);
-        this.socket.off('roomNotFound', this.onRoomNotFoundHandler);
         this.socket.off('reconnectSuccess', this.onReconnectSuccessHandler);
         this.socket.off('reconnectFailed', this.onReconnectFailedHandler);
         this.socket.off('gameStart', this.onGameStartHandler);
@@ -226,7 +223,6 @@ class MultiplayerScene extends BaseGameScene {
         this.socket.off('joinedRoom', this.onJoinedRoomHandler);
         this.socket.off('waitingForOpponent', this.onWaitingForOpponentHandler);
         this.socket.off('paddleHit', this.onPaddleHitHandler);
-        this.socket.off('scoreUpdate', this.onScoreUpdateHandler);
 
         console.log('🧹 Removendo listeners de socket...');
     }
@@ -274,12 +270,6 @@ class MultiplayerScene extends BaseGameScene {
         });
     }
 
-    handleRoomNotFound(data) {
-        console.log('❌ [CLIENT] RoomNotFound:', data.message);
-        this.showWait('Sala Não Encontrada', data.message);
-        this.backToMenuScene();
-    }
-
     handleReconnectSuccess(data) {
         console.log('✅ [CLIENT] ReconnectSuccess:', data);
         this.playerNumber = data.playerNumber;
@@ -287,6 +277,10 @@ class MultiplayerScene extends BaseGameScene {
         this.reconnectToken = data.reconnectToken;
         this.hasJoinedRoom = true;
         this.stopReconnectTimer();
+
+        this.hideEndGameMenu();
+        this.hideWait();
+
         this.statusText.setText('Reconexão bem-sucedida!');
         this.serverState = data.gameState;
         this.applyServerState(this.serverState);
@@ -295,6 +289,7 @@ class MultiplayerScene extends BaseGameScene {
 
     handleReconnectFailed(data) {
         console.log('❌ [CLIENT] ReconnectFailed:', data);
+        this.clearReconnectToken();
         this.stopReconnectTimer();
         this.showWait('Reconexão Falhou', data.message);
 
@@ -310,17 +305,17 @@ class MultiplayerScene extends BaseGameScene {
         this.applyServerState(this.serverState);
     }
 
-    handleGameState(state) {
+    handleGameState(data) {
         // console.log('🔄 [CLIENT] gameState', state); // DEBUG
-        this.serverState = state;
-        this.interpolationBuffer.push(state);
+        this.serverState = data.gameState;
+        this.interpolationBuffer.push(data.gameState);
 
         const maxStates = this.BUFFER_SIZE;
         while (this.interpolationBuffer.length > maxStates) {
             this.interpolationBuffer.shift();
         }
 
-        this.gameStarted = state.gameStarted;
+        this.gameStarted = data.gameState.gameStarted;
 
         this.updateScore();
     }
@@ -347,6 +342,7 @@ class MultiplayerScene extends BaseGameScene {
 
     handleGameEnd(data) {
         console.log('🏆 [CLIENT] gameEnd recebido:', data);
+        this.clearReconnectToken();
         this.stopGameLogic();
         this.hideServerCountdown();
 
@@ -461,6 +457,9 @@ class MultiplayerScene extends BaseGameScene {
     handlePlayerReconnected(data) {
         console.log('🤝 [CLIENT] PlayerReconnected:', data);
         this.statusText.setText(`Jogador ${data.playerNumber} reconectou.`);
+
+        this.hideEndGameMenu();
+        this.hideWait();
         this.hideServerCountdown();
         // O servidor deve enviar um gameState atualizado ou retomar o jogo
     }
@@ -511,12 +510,18 @@ class MultiplayerScene extends BaseGameScene {
 
     handleGameResuming(data) {
         console.log('▶️ [CLIENT] GameResuming:', data);
+        this.hideEndGameMenu();
+
         this.showWait('Jogo Retomando', 'Aguardando sincronização...');
     }
 
     handleGameResumed(data) {
         console.log('✅ [CLIENT] GameResumed:', data);
         this.statusText.setText('Jogo retomado!');
+
+        this.hideWait();
+        this.hideEndGameMenu();
+        this.hideServerCountdown();
     }
 
     handleJoinedRoom(data) {
@@ -544,16 +549,9 @@ class MultiplayerScene extends BaseGameScene {
         this.showWait('Aguardando Oponente', data);
     }
 
-    handlePaddleHit(player) {
+    handlePaddleHit(paddleNumber) {
         // console.log('💥 [CLIENT] PaddleHit:', player); // DEBUG
-        this.playPaddleHitEffects(player.paddleNumber);
-    }
-
-    handleScoreUpdate(data) {
-        // console.log('📊 [CLIENT] ScoreUpdate:', data); // DEBUG
-        this.score1 = data.scores.p1;
-        this.score2 = data.scores.p2;
-        this.updateScore();
+        this.playPaddleHitEffects(paddleNumber);
     }
 
     startLatencyMonitor() {
@@ -594,6 +592,7 @@ class MultiplayerScene extends BaseGameScene {
         // console.debug(`✅ sendPaddleInput para o servidor. this.playerNumber=${this.playerNumber}`);
 
         if (!this.socket || !this.playerNumber) return;
+        if (!this.gameStarted) return;
 
         let vy = 0;
         if (this.keys.W.isDown || this.cursors.up.isDown) {
@@ -759,7 +758,6 @@ class MultiplayerScene extends BaseGameScene {
         }
         this.socket = null;
 
-        localStorage.removeItem(`reconnectToken_${this.roomCode}`);
         this.roomCode = null;
         this.reconnectToken = null;
         this.stopReconnectTimer();
@@ -768,6 +766,10 @@ class MultiplayerScene extends BaseGameScene {
             this.latencyTimer = null;
         }
         this.hideServerCountdown();
+    }
+
+    clearReconnectToken() {
+        localStorage.removeItem(`reconnectToken_${this.roomCode}`);
     }
 
     shutdown() {
