@@ -286,6 +286,7 @@ class MultiplayerScene extends BaseGameScene {
 
     handleReconnectFailed(data) {
         console.log('❌ [CLIENT] ReconnectFailed:', data);
+        this.clearReconnectToken();
         this.stopReconnectTimer();
         this.showWait('Reconexão Falhou', data.message);
 
@@ -338,6 +339,7 @@ class MultiplayerScene extends BaseGameScene {
 
     handleGameEnd(data) {
         console.log('🏆 [CLIENT] gameEnd recebido:', data);
+        this.clearReconnectToken();
         this.stopGameLogic();
         this.hideServerCountdown();
 
@@ -750,7 +752,6 @@ class MultiplayerScene extends BaseGameScene {
         }
         this.socket = null;
 
-        localStorage.removeItem(`reconnectToken_${this.roomCode}`);
         this.roomCode = null;
         this.reconnectToken = null;
         this.stopReconnectTimer();
@@ -759,6 +760,10 @@ class MultiplayerScene extends BaseGameScene {
             this.latencyTimer = null;
         }
         this.hideServerCountdown();
+    }
+
+    clearReconnectToken() {
+        localStorage.removeItem(`reconnectToken_${this.roomCode}`);
     }
 
     shutdown() {
